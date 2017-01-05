@@ -1,0 +1,369 @@
+
+---
+output:
+  knitrBootstrap::bootstrap_document:
+    title: "Milestone Report"
+    theme: default
+    highlight: sunburst
+    theme.chooser: TRUE
+    highlight.chooser: TRUE
+---
+# JHU Data Science Specialization Capstone Milestone Report
+
+## Executive summary 
+
+This is a milestone (progress) report for the Coursera Data Science Specialization Capstone project from Johns Hopkins University (JHU). 
+For the Capstone Project JHU is partnering with [SwiftKey](http://swiftkey.com/en/) to apply data science in the area of **natural language processing**.
+The objective of this project is to build a working predictive text model which will be turned into a Shiny application (app).
+For example, the app might receive the input phrase "_throw in the_"  and it might output the word "_towel_".  
+
+The data we will use in training and testing the predictive model is from a **corpus** called [HC Corpora](http://www.corpora.heliohost.org). [1] The readme file at 
+[readme](http://www.corpora.heliohost.org/aboutcorpus.html) contains the details on the available corpora.
+ 
+
+  This milestone report comprises a listing of major features of the data we have identified, summaries of our plans for creating the prediction algorithm and [Shiny](http://shiny.rstudio.com/) application and some general exploratory data analysis.
+
+
+Note:  To View/Hide R Code click the R Source button. Click on the respective item in the toc (upper right) to navigate the document. To change the theme see the bottom navigation panel. R code also  appears in the Appendix A and resources in Appendix B.
+
+
+
+
+## Setting the R Environment
+
+---
+
+We set a global _seed_ for future reproducibility, load the required packages, turn echo on for R code chunks, center figures and suppress messages and warnings.
+
+
+```{r setup, eval=FALSE, cache= TRUE }
+
+
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.align = 'center',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+
+pkgs=c('tm','microbenchmark', 'parallel','devtools','xtable', 'quanteda','RColorBrewer')
+
+lapply(pkgs, library, character.only=TRUE)
+
+# For the knitrBootstrap style
+
+ install_github('rstudio/rmarkdown')
+ install.packages('knitr', repos = c('http://rforge.net', 'http://cran.rstudio.org'),type = 'source')
+ devtools::install_github('jimhester/knitrBootstrap')
+ devtools::install_github("kbenoit/quanteda")
+
+ # Set the seed 
+ 
+ set.seed(98765)
+ 
+
+```
+
+### Load the Raw Data as Corpora
+
+```{r eval = FALSE}
+
+Blogs <- VCorpus(DirSource("trainingblogs", encoding = "UTF-8"), readerControl = list(language = "en"))
+
+News <- VCorpus(DirSource("trainingnews", encoding = "UTF-8"), readerControl = list(language = "en"))
+
+Twitter <- VCorpus(DirSource("trainingtwitter", encoding = "UTF-8"), readerControl = list(language = "en"))
+
+ Corpora =list(Blogs,News,Twitter); save(Corpora, file='Corpora.RData');
+ 
+ rm( list=c('Blogs','News', 'Twitter')) ; load(Corpora.RData)
+
+```
+
+
+## Analysis of the Raw Data 
+
+---
+
+#### Basic Definitions and Terms
+
+First we define a few terms. For the purposes of this report a text _document_ is a string of characters coercible into Unicode format. It is the basic unit of analysis. It could be a single memo or a chapter in a book. A collection of such documents is termed a _corpora_ or linguistic _corpus_. Given a document in order to further study it we segment or parse it into _tokens_. These can be thought of as the words in a text document. If one only considers the set of unique words in a document then each unique word is termed a _type_. 
+
+Basic descriptive summaries of text fall into 3 categories: 
+  Readability, Vocabulary Diversity , Counts (frequencies).
+
+One important feature of a text is its _complexity_. This complexity notion  is really intuitive and there are many ways to quantify it. Readability and Vocabulary Diversity are both measures of this _complexity_. 
+
+Simple vocabulary diversity measures a type-to-token ratio (TTR) where unique words are
+types and the total words are tokens. Notice that this ratio is at most one, in which case every word is unique.
+
+
+Readability usually uses some combination of syllables and sentence length to indicate “readability”.  A common measure is the Flesch-Kincaid Grade Level score: $$(.39 x ASL) + (11.8 x ASW) – 15.59$$
+
+where:
+
+ASL = average sentence length (the number of words divided by the number of sentences)
+
+ASW = average number of syllables per word (the number of syllables divided by the number of words)
+
+
+The Counts or fequencies can be of any sort e.g. ( characters, words, lines, sentences, paragraphs, pages, sections, chapters, etc.)
+
+
+
+#### Summaries and Excerpts
+
+```{r }
+
+load('T.RData') ;knitr::kable(T,caption = 'Table 1')
+
+```
+
+---
+
+Blog Excerpt:
+
+[1] "Now, before you leap off to check it out, thinking you'll be inundated with short satisfying stories filled to the brim with graphic sex, let me tell you, that's not what you'll find. Not to say that's not what a significant proportion, if not most, yaoi is, I found this an atypical yaoi. So, if you read this and loved this, that doesn't mean the rest of yaoi will be your cup of tea. Nor does it mean that if you read this and wondered where all the naked sweaty guys were from chapter to chapter, that you won't like yaoi, even if this isn't your cup of tea."
+[2] NA                       
+
+News Excerpt: 
+
+[1] "\"Within 15 minutes the guy came out and said, ‘Oh my God, this is a clear case of embezzlement,’â\u0080 \" said Blake, 76, adding the theft was pegged at about $30,000."
+
+Twitter Excerpt:
+
+[1] "Boy:tell me a secret tht u have never told any1Girl:u dont want to knowBoy:if u tell me urs ill tell u mineGirl:I<3uThe boy said thts mine2"
+
+---
+
+#### Analysis of Raw Data 
+
+The first thing that we notice is that the size of the raw data is large (see Table 1) and even when using both cores the execution times are unacceptable. 
+
+
+First from **Table 1** we see that we have 3 **large** text files. Since Diversity (TTR) is small many of the words are repeated... expecially for news. The data was so large that we could only get readability for news and looking at FK we see that it is not very complex reading. It is reading at a beginning high school level. 
+
+The second thing that we notice is that the data will need extensive cleaning (see excerpts).
+
+---
+
+As mentioned earlier we could not even obtain readability for some of our documents due to their size. Given the available resources we opt to subset a smaller sample of the data $(1\%)$ and then proceed with our analysis with the restricted data set. We are aware that we sacrifice accuracy in prediction with a smaller data set.
+
+
+## Sampling the data
+
+---
+
+First we subset or get a sample with a custom made subsetting function.
+
+
+
+#### Subset the Corpus
+
+```{r eval = FALSE }
+
+source('SubsetCorpus.R')
+
+Blogs.s <- SubsetCorpus(Corpora[[1]],.01); 
+
+News.s <- SubsetCorpus(Corpora[[2]],.01); 
+
+Twitter.s <- SubsetCorpus(Corpora[[3]],.01); rm(list='Corpora')
+
+```
+
+## Swiss Army Knife 
+
+---
+
+There are primarily two packages that we use to analyze the data: tm and quandeta. We can use tm to subset the data but quandeta is specialized for going from a corpus to a _document feature matrix_ (dfm). Notice that a feature is more general than a term and hence a document feature matrix is more general than a _document term matrix_. A drawback is that it is not easy to subset with quandeta and also one cannot use its many features if the data is too large e.g. readability as mentioned earlier.
+
+The dfm feature is termed a swiss army knife and it is  the workhorse for data analysis in the quanteda package. We can use it to clean, process, describe, tokenize and form n-grams and visualize data. 
+
+Note: To tokenize is to take a document and parse it into tokens and an n-gram is string of n-tokens. So a 1 gram is just a token or better yet an instance of a type. 
+
+For our cleaning purposes, we make lower case, remove punctuation, remove numbers, remove separators, remove stop words, keep Acronyms, and keep '#@' for twitter. At this time I did not do any stemming as I am not convinced as of yet of its efficacy when trying to produce an NLP text prediction app.
+
+```{r eval= FALSE}
+
+Blogs.s <- Blogs.s[[1]] ; News.s <- News.s[[1]] ; Twitter.s <- Twitter.s[[1]]
+
+
+Total.s <- unlist(c(Blogs.s , News.s , Twitter.s) )
+
+Total1.s.dfm <- dfm(Total.s, verbose = TRUE, toLower = TRUE,
+    removeNumbers = TRUE, removePunct = TRUE, removeSeparators = TRUE,
+    removeTwitter = FALSE, stem = FALSE, ignoredFeatures = NULL,
+    keptFeatures = NULL,ngrams =1, language = "english", thesaurus = NULL, dictionary = NULL)
+
+Total2.s.dfm <- dfm(Total.s, verbose = TRUE, toLower = TRUE,
+                    removeNumbers = TRUE, removePunct = TRUE, removeSeparators = TRUE,
+                    removeTwitter = FALSE, stem = FALSE, ignoredFeatures = NULL,
+                    keptFeatures = NULL,ngrams =2, language = "english", thesaurus = NULL, dictionary = NULL)
+
+
+Total3.s.dfm <- dfm(Total.s, verbose = TRUE, toLower = TRUE,
+                    removeNumbers = TRUE, removePunct = TRUE, removeSeparators = TRUE,
+                    removeTwitter = FALSE, stem = FALSE, ignoredFeatures = NULL,
+                    keptFeatures = NULL,ngrams =3, language = "english", thesaurus = NULL, dictionary = NULL)
+
+
+Total4.s.dfm <- dfm(Total.s, verbose = TRUE, toLower = TRUE,
+                    removeNumbers = TRUE, removePunct = TRUE, removeSeparators = TRUE,
+                    removeTwitter = FALSE, stem = FALSE, ignoredFeatures = NULL,
+                    keptFeatures = NULL,ngrams =4, language = "english", thesaurus = NULL, dictionary = NULL)
+
+dfm <- c(Total1.s.dfm, Total2.s.dfm,Total3.s.dfm, Total4.s.dfm)
+
+save(dfm, file= 'dfm.RData')
+
+```
+
+### Visualization of Data 
+
+Next we display some of the major features of our data. 
+
+Note: Click images to Enlarge
+
+ 
+##### Histograms
+
+```{r fig.align='center', fig.width=13, warning= FALSE, message=FALSE}
+
+source('multiplot.R') ; load('p1.RData'); load('p2.RData')
+multiplot(p1, p2, cols=2)
+
+load('p3.RData') ; load('p4.RData')
+
+multiplot( p3, p4, cols=2)
+
+rm(list=c('p1','p2','p3','p4'))
+
+```
+
+
+##### Word Clouds
+
+```{r fig.align='center', fig.width= 13, warning = FALSE, message= FALSE}
+
+load('dfm.RData') ; library('RColorBrewer')
+
+ layout(matrix(c(1,2,1,2), 1, 2, byrow = TRUE))
+
+plot(dfm[[1]], max.words = 100, colors = brewer.pal(6, "Dark2"), scale = c(2, .5))
+
+plot(dfm[[2]], max.words = 100, colors = brewer.pal(6, "Dark2"), scale = c(2, .5))
+
+layout(matrix(c(1,2,1,2), 1, 2, byrow = TRUE))
+
+plot(dfm[[3]], max.words = 100, colors = brewer.pal(6, "Dark2"), scale = c(2, .5))
+
+plot(dfm[[4]], max.words = 100, colors = brewer.pal(6, "Dark2"), scale = c(1, .5))
+
+
+```
+
+
+## Checklist
+
+---
+
+- [x] downloaded and loaded the data 
+- [x] created basic summary statistics about the data sets 
+- [x] report any interesting findings I have seen so far
+- [x] plans for the Final Project 
+
+## Conclusion 
+
+---
+
+First it took quite awhile to get all of the functions in the packages to work. Some would work with ordinary size data but as soon as the data got too large RStudio would freeze, restart or the function would not work as it had previously. 
+
+Also some functions were supported in some versions of R or RStudio but not in other versions e.g. recordPlot() and replayPlot(). 
+
+I am still undecided on the exact amount of preprocessing and cleaning to do. I made several cleaning functions, however I have used the swiss army knife options for cleaning in this report.
+
+Going forward we will use the n-grams and the swiss army knife to build a next word predicion algorithm. We will reuire a lookup table for each n-gram. The Katz Backoff algorithm will search in the 4-gram model, then the 3-gram, and then in the 2-gram. If there is no match, then a most probable word will be returned. In order to insure the best results we will need a large sample size. This is problematic.
+
+There may be a way to use the PCorpus as opposed to VCorpus to load the corpuses into the external hard drive as a database and then couple this with the filehash package to better resolve the memory problem. This _may_ help with memory but I'm  not sure it will resolve any speed issues. 
+
+Eventually we will implement the algorithm as a web app using shiny. A phrase will be entered and the algorithm will return the predicted next word. 
+
+
+## Appendix A
+
+```{r eval = FALSE}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+```
+
+
+
+
+
+```{r eval= FALSE}
+SubsetCorpus<- function(x,p) { 
+  
+  lapply(x,function(y,p){
+    
+    l<-sample(y[[1]], size =round(p*length(y[[1]])));
+    
+    return(l) },p=p)
+  
+}
+
+```
+
+## Appendix B 
+
+- 1. [http://desilinguist.org/pdf/crossroads.pdf](http://desilinguist.org/pdf/crossroads.pdf)
+- 2. [https://lagunita.stanford.edu/c4x/Engineering/CS-224N/asset/slp4.pdf](https://lagunita.stanford.edu/c4x/Engineering/CS-224N/asset/slp4.pdf)
+- 3. [http://www.statmt.org/book/slides/07-language-models.pdf](http://www.statmt.org/book/slides/07-language-models.pdf)
+- 4. [http://onepager.togaware.com/TextMiningO.pdf](http://onepager.togaware.com/TextMiningO.pdf)
+- 5. [https://rstudio-pubs-static.s3.amazonaws.com/31867_8236987cf0a8444e962ccd2aec46d9c3.html](https://rstudio-pubs-static.s3.amazonaws.com/31867_8236987cf0a8444e962ccd2aec46d9c3.html)
+- 6. [http://nlp.stanford.edu/~wcmac/papers/20050421-smoothing-tutorial.pdf](http://nlp.stanford.edu/~wcmac/papers/20050421-smoothing-tutorial.pdf)
+- 7. [https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf](https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf)
+
+
+
+
