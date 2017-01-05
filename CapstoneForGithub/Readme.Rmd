@@ -1,0 +1,12 @@
+---
+title: "Readme"
+author: "John Cleveland"
+date: "January 2, 2017"
+output: html_document
+---
+
+This app is created as part of the requirement for the Coursera Data Science Capstone Course.
+
+The project builds a predictive text model combined with a shiny app UI that will predict the next word or autocomplete as the user types a phrase. This is similar to the way most smart phone keyboards are implemented today using the technology of Swiftkey.
+
+In the top right you can click **Show Below** to get more room for the app. It will display at the bottom.
