@@ -1,6 +1,6 @@
 # This repository is for the Data Science Specialization Capstone Project.
 
-It comprises four directories: Capstone, Database_Files, Milestone and Presentation.
+It comprises four directories: CapstoneForGithub, Database_Files, Milestone and Presentation.
 
 The CapstoneForGithub directory contains the code for the shinyapp. CapstoneForGithub/wwwforgithub contains some of the www files. I could not load all of the internet files, due to size constraints :
 Here is a deployment of the shinyapp entitled Autocompleter:
