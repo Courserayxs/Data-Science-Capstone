@@ -2,7 +2,7 @@
 
 It comprises four directories: Capstone, Database_Files, Milestone and Presentation.
 
-The Capstone contains the code for the shinyapp:
+The CapstoneForGithub directory contains the code for the shinyapp. CapstoneForGithub/wwwforgithub contains some of the www files. I could not load all of the internet files, due to size constraints :
 Here is a deployment of the shinyapp entitled Autocompleter:
 https://yxs8495.shinyapps.io/Capstone_app/
 
